@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse, Server } from "http";
 import { Server as IoServer } from "socket.io";
+import { insertEvent, getRecentEvents } from "./src/lib/server/db";
+
 
 import type {
 	ClientToServerEvents,
@@ -41,13 +43,10 @@ export function attach_sockets(
 		io.to(channel).emit("users", channelUsers);
 	}
 
-	function pushEvent(e: FeedEvent) {
-		eventsByChannel[e.channel].push(e);
-		if (eventsByChannel[e.channel].length > HISTORY_LIMIT) {
-			eventsByChannel[e.channel] = eventsByChannel[e.channel].slice(-HISTORY_LIMIT);
-		}
-		io.to(e.channel).emit("event", e);
-	}
+	async function pushEvent(e: FeedEvent) {
+	await insertEvent(e);
+	io.to(e.channel).emit("event", e);
+}
 
 	function systemEvent(channel: Channel, text: string): FeedEvent {
 		return {
@@ -62,7 +61,7 @@ export function attach_sockets(
 	}
 
 	io.on("connection", (socket) => {
-		socket.on("join", ({ name, channel }) => {
+		socket.on("join", async ({ name, channel }) => {
 			const safeChannel: Channel = CHANNELS.includes(channel) ? channel : "general";
 
 			socket.data.name = name;
@@ -72,13 +71,13 @@ export function attach_sockets(
 
 			users.push({ id: socket.id, name, channel: safeChannel });
 
-			socket.emit("history", eventsByChannel[safeChannel]);
+			socket.emit("history", await getRecentEvents(safeChannel));
 
-			pushEvent(systemEvent(safeChannel, `👋 ${name} joined #${safeChannel}`));
+			await pushEvent(systemEvent(safeChannel, `👋 ${name} joined #${safeChannel}`));
 			emitUsers(safeChannel);
 		});
 
-		socket.on("switch_channel", (nextChannel) => {
+		socket.on("switch_channel", async (nextChannel) => {
 			const prev = socket.data.channel;
 			const name = socket.data.name;
 
@@ -97,20 +96,20 @@ export function attach_sockets(
 					u.id === socket.id ? { ...u, channel: safeNext } : u
 				);
 
-				pushEvent(systemEvent(prev, `🏃 ${name} left #${prev}`));
+				await pushEvent(systemEvent(prev, `🏃 ${name} left #${prev}`));
 				emitUsers(prev);
 			}
 
 			socket.join(safeNext);
 			socket.data.channel = safeNext;
 
-			socket.emit("history", eventsByChannel[safeNext]);
+			socket.emit("history", await getRecentEvents(safeNext));
 
-			pushEvent(systemEvent(safeNext, `👋 ${name} joined #${safeNext}`));
+			await pushEvent(systemEvent(safeNext, `👋 ${name} joined #${safeNext}`));
 			emitUsers(safeNext);
 		});
 
-		socket.on("post_event", (payload: PostEventPayload, ack) => {
+		socket.on("post_event", async (payload: PostEventPayload, ack) => {
 			const name = socket.data.name;
 			const channel = socket.data.channel;
 
@@ -144,18 +143,18 @@ export function attach_sockets(
 				system: false,
 			};
 
-			pushEvent(e);
+			await pushEvent(e);
 			ack({ ok: true, event: e });
 		});
 
-		socket.on("disconnect", () => {
+		socket.on("disconnect", async () => {
 			const name = socket.data.name;
 			const channel = socket.data.channel;
 
 			users = users.filter((u) => u.id !== socket.id);
 
 			if (channel && name) {
-				pushEvent(systemEvent(channel, `🏃 ${name} disconnected`));
+				await pushEvent(systemEvent(channel, `🏃 ${name} disconnected`));
 				emitUsers(channel);
 			}
 		});

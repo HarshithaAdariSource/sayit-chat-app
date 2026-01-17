@@ -12,3 +12,4 @@ todo.txt
 server.js
 sockets.js
 src/*.js
+data.sqlite

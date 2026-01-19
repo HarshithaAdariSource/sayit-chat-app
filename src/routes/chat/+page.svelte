@@ -38,6 +38,9 @@
 	function setup_socket() {
 		socket = io();
 
+		// after socket = io();
+		(window as any).__socket = socket;
+
 		socket.on("history", async (history) => {
 			events = history;
 			
@@ -64,6 +67,9 @@
 		});
 
 		socket.emit("join", { name: $name, channel, sinceTs: lastSeenTs[channel] });
+		socket.on("connect", () => {
+			socket?.emit("join", { name: $name, channel, sinceTs: lastSeenTs[channel] });
+		});
 	}
 
 	function switchChannel(next: Channel) {

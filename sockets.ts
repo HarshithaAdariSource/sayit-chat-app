@@ -2,7 +2,6 @@ import type { IncomingMessage, ServerResponse, Server } from "http";
 import { Server as IoServer } from "socket.io";
 import { insertEvent, getRecentEvents, getEventsSince } from "./src/lib/server/db";
 
-
 import type {
 	ClientToServerEvents,
 	ServerToClientEvents,
@@ -25,11 +24,6 @@ export function attach_sockets(
 	server: Server<typeof IncomingMessage, typeof ServerResponse>
 ) {
 	let users: UserPresence[] = [];
-	const eventsByChannel: Record<Channel, FeedEvent[]> = {
-		general: [],
-		alerts: [],
-		incidents: [],
-	};
 
 	const io = new IoServer<
 		ClientToServerEvents,
@@ -44,9 +38,9 @@ export function attach_sockets(
 	}
 
 	async function pushEvent(e: FeedEvent) {
-	await insertEvent(e);
-	io.to(e.channel).emit("event", e);
-}
+		await insertEvent(e);
+		io.to(e.channel).emit("event", e);
+	}
 
 	function systemEvent(channel: Channel, text: string): FeedEvent {
 		return {
@@ -62,25 +56,48 @@ export function attach_sockets(
 
 	io.on("connection", (socket) => {
 		socket.on("join", async ({ name, channel, sinceTs }) => {
-
 			const safeChannel: Channel = CHANNELS.includes(channel) ? channel : "general";
+
+			// Treat as resync if the same socket already joined this channel previously
+			const isResync =
+				socket.data.name === name && socket.data.channel === safeChannel;
 
 			socket.data.name = name;
 			socket.data.channel = safeChannel;
 
 			socket.join(safeChannel);
 
-			users.push({ id: socket.id, name, channel: safeChannel });
-
+			// Send history (incremental if sinceTs provided)
 			const history =
 				typeof sinceTs === "number"
-					? await getEventsSince(safeChannel, sinceTs)
-					: await getRecentEvents(safeChannel);
+					? await getEventsSince(safeChannel, sinceTs, HISTORY_LIMIT)
+					: await getRecentEvents(safeChannel, HISTORY_LIMIT);
+
 			socket.emit("history", history);
 
+			// Presence handling:
+			// - On first join, add user + announce
+			// - On resync, do NOT announce, but ensure presence is correct
+			if (!isResync) {
+				// Remove any existing entry for this socket id (safety)
+				users = users.filter((u) => u.id !== socket.id);
 
-			await pushEvent(systemEvent(safeChannel, `👋 ${name} joined #${safeChannel}`));
-			emitUsers(safeChannel);
+				users.push({ id: socket.id, name, channel: safeChannel });
+
+				await pushEvent(systemEvent(safeChannel, `👋 ${name} joined #${safeChannel}`));
+				emitUsers(safeChannel);
+			} else {
+				// Ensure presence entry exists and is correct (no join spam)
+				const existing = users.find((u) => u.id === socket.id);
+				if (!existing) {
+					users.push({ id: socket.id, name, channel: safeChannel });
+				} else {
+					users = users.map((u) =>
+						u.id === socket.id ? { ...u, name, channel: safeChannel } : u
+					);
+				}
+				emitUsers(safeChannel);
+			}
 		});
 
 		socket.on("switch_channel", async ({ channel: nextChannel, sinceTs }) => {
@@ -95,9 +112,11 @@ export function attach_sockets(
 			const safeNext: Channel = CHANNELS.includes(nextChannel) ? nextChannel : "general";
 			if (prev === safeNext) return;
 
+			// Leave previous room and announce leave there
 			if (prev) {
 				socket.leave(prev);
 
+				// Update presence to new channel before emitting users list
 				users = users.map((u) =>
 					u.id === socket.id ? { ...u, channel: safeNext } : u
 				);
@@ -106,15 +125,17 @@ export function attach_sockets(
 				emitUsers(prev);
 			}
 
+			// Join new room
 			socket.join(safeNext);
 			socket.data.channel = safeNext;
 
+			// Send history for new channel (incremental if sinceTs provided)
 			const history =
 				typeof sinceTs === "number"
-				    ? await getEventsSince(safeNext, sinceTs)
-					: await getRecentEvents(safeNext);
-            socket.emit("history", history);
+					? await getEventsSince(safeNext, sinceTs, HISTORY_LIMIT)
+					: await getRecentEvents(safeNext, HISTORY_LIMIT);
 
+			socket.emit("history", history);
 
 			await pushEvent(systemEvent(safeNext, `👋 ${name} joined #${safeNext}`));
 			emitUsers(safeNext);
@@ -162,6 +183,7 @@ export function attach_sockets(
 			const name = socket.data.name;
 			const channel = socket.data.channel;
 
+			// Remove from presence list
 			users = users.filter((u) => u.id !== socket.id);
 
 			if (channel && name) {

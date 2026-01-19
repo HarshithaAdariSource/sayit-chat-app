@@ -25,12 +25,18 @@ export type UserPresence = {
 export type JoinPayload = {
 	name: string;
 	channel: Channel;
+	sinceTs?: number;
 };
 
 export type PostEventPayload = {
 	channel: Channel;
 	type: "MESSAGE_POSTED" | "ALERT_CREATED";
 	text: string;
+};
+
+export type SwitchChannelPayload = {
+	channel: Channel;
+	sinceTs?: number;
 };
 
 export type PostAck =
@@ -49,7 +55,7 @@ export type ServerToClientEvents = {
 
 export type ClientToServerEvents = {
 	join: (p: JoinPayload) => void;
-	switch_channel: (channel: Channel) => void;
+	switch_channel: (p: SwitchChannelPayload) => void;
 
 	post_event: (p: PostEventPayload, ack: (res: PostAck) => void) => void;
 };

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse, Server } from "http";
 import { Server as IoServer } from "socket.io";
-import { insertEvent, getRecentEvents } from "./src/lib/server/db";
+import { insertEvent, getRecentEvents, getEventsSince } from "./src/lib/server/db";
 
 
 import type {
@@ -61,7 +61,8 @@ export function attach_sockets(
 	}
 
 	io.on("connection", (socket) => {
-		socket.on("join", async ({ name, channel }) => {
+		socket.on("join", async ({ name, channel, sinceTs }) => {
+
 			const safeChannel: Channel = CHANNELS.includes(channel) ? channel : "general";
 
 			socket.data.name = name;
@@ -71,13 +72,18 @@ export function attach_sockets(
 
 			users.push({ id: socket.id, name, channel: safeChannel });
 
-			socket.emit("history", await getRecentEvents(safeChannel));
+			const history =
+				typeof sinceTs === "number"
+					? await getEventsSince(safeChannel, sinceTs)
+					: await getRecentEvents(safeChannel);
+			socket.emit("history", history);
+
 
 			await pushEvent(systemEvent(safeChannel, `👋 ${name} joined #${safeChannel}`));
 			emitUsers(safeChannel);
 		});
 
-		socket.on("switch_channel", async (nextChannel) => {
+		socket.on("switch_channel", async ({ channel: nextChannel, sinceTs }) => {
 			const prev = socket.data.channel;
 			const name = socket.data.name;
 
@@ -103,7 +109,12 @@ export function attach_sockets(
 			socket.join(safeNext);
 			socket.data.channel = safeNext;
 
-			socket.emit("history", await getRecentEvents(safeNext));
+			const history =
+				typeof sinceTs === "number"
+				    ? await getEventsSince(safeNext, sinceTs)
+					: await getRecentEvents(safeNext);
+            socket.emit("history", history);
+
 
 			await pushEvent(systemEvent(safeNext, `👋 ${name} joined #${safeNext}`));
 			emitUsers(safeNext);

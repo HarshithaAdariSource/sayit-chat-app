@@ -27,6 +27,7 @@
 
 	let lastError = "";
 	let socket: Socket<ServerToClientEvents, ClientToServerEvents> | undefined;
+	let lastSeenTs: Record<string, number> = {};
 
 	if (browser && !$name) {
 		goto("/");
@@ -39,12 +40,19 @@
 
 		socket.on("history", async (history) => {
 			events = history;
+			
+			if (history.length > 0) {
+				lastSeenTs[channel] = history[history.length - 1].ts;
+			}
 			await scroll_to_bottom();
 		});
 
 		socket.on("event", async (e) => {
 			events = [...events, e];
-			await scroll_to_bottom();
+			if (e.channel === channel) {
+				lastSeenTs[channel] = e.ts;
+			}
+		    await scroll_to_bottom();
 		});
 
 		socket.on("users", (_users) => {
@@ -55,13 +63,13 @@
 			lastError = msg;
 		});
 
-		socket.emit("join", { name: $name, channel });
+		socket.emit("join", { name: $name, channel, sinceTs: lastSeenTs[channel] });
 	}
 
 	function switchChannel(next: Channel) {
 		channel = next;
 		lastError = "";
-		socket?.emit("switch_channel", next);
+		socket?.emit("switch_channel", { channel: next, sinceTs: lastSeenTs[next] });
 	}
 
 	function send_event() {

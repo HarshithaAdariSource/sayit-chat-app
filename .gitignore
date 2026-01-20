@@ -13,3 +13,4 @@ server.js
 sockets.js
 src/*.js
 data.sqlite
+data.test.sqlite

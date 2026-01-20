@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse, Server } from "http";
 import { Server as IoServer } from "socket.io";
 import { insertEvent, getRecentEvents, getEventsSince } from "./src/lib/server/db";
+import { validatePostEvent } from "./src/lib/server/validation";
 
 import type {
 	ClientToServerEvents,
@@ -58,7 +59,6 @@ export function attach_sockets(
 		socket.on("join", async ({ name, channel, sinceTs }) => {
 			const safeChannel: Channel = CHANNELS.includes(channel) ? channel : "general";
 
-			// Treat as resync if the same socket already joined this channel previously
 			const isResync =
 				socket.data.name === name && socket.data.channel === safeChannel;
 
@@ -67,7 +67,6 @@ export function attach_sockets(
 
 			socket.join(safeChannel);
 
-			// Send history (incremental if sinceTs provided)
 			const history =
 				typeof sinceTs === "number"
 					? await getEventsSince(safeChannel, sinceTs, HISTORY_LIMIT)
@@ -75,19 +74,13 @@ export function attach_sockets(
 
 			socket.emit("history", history);
 
-			// Presence handling:
-			// - On first join, add user + announce
-			// - On resync, do NOT announce, but ensure presence is correct
 			if (!isResync) {
-				// Remove any existing entry for this socket id (safety)
 				users = users.filter((u) => u.id !== socket.id);
-
 				users.push({ id: socket.id, name, channel: safeChannel });
 
 				await pushEvent(systemEvent(safeChannel, `👋 ${name} joined #${safeChannel}`));
 				emitUsers(safeChannel);
 			} else {
-				// Ensure presence entry exists and is correct (no join spam)
 				const existing = users.find((u) => u.id === socket.id);
 				if (!existing) {
 					users.push({ id: socket.id, name, channel: safeChannel });
@@ -143,35 +136,29 @@ export function attach_sockets(
 
 		socket.on("post_event", async (payload: PostEventPayload, ack) => {
 			const name = socket.data.name;
-			const channel = socket.data.channel;
+			const activeChannel = socket.data.channel;
 
-			if (!name || !channel) {
-				ack({ ok: false, error: "Not joined yet." });
+			// Validation moved to a dedicated module for unit testing
+			const res = validatePostEvent({
+				activeChannel,
+				payload,
+			});
+
+			if (!res.ok) {
+				ack({ ok: false, error: res.error });
 				return;
 			}
 
-			if (payload.channel !== channel) {
-				ack({ ok: false, error: "You can only post to your active channel." });
-				return;
-			}
-
-			const text = (payload.text ?? "").trim();
-			if (!text) {
-				ack({ ok: false, error: "Message cannot be empty." });
-				return;
-			}
-			if (text.length > 500) {
-				ack({ ok: false, error: "Message too long (max 500 chars)." });
-				return;
-			}
+			// At this point activeChannel is defined and equals payload.channel
+			const channel = activeChannel as Channel;
 
 			const e: FeedEvent = {
 				id: makeId(),
 				ts: Date.now(),
 				channel,
 				type: payload.type,
-				author: name,
-				text,
+				author: name ?? "",
+				text: payload.text.trim(),
 				system: false,
 			};
 

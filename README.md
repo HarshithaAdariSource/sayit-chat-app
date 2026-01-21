@@ -51,43 +51,25 @@ live data feeds
 
 # Tech Stack
 
-Frontend
-
-SvelteKit
-
-TypeScript
-
-Socket.IO client
-
-Backend
-
-Node.js
-
-Express
-
-Socket.IO server
-
-Tooling
-
-Vite
-
-TypeScript (strict mode)
-
-ESLint (via SvelteKit defaults)
+Frontend: SvelteKit, TypeScript, Socket.IO client
+Backend: Node.js, Express, Socket.IO server
+Tooling: Vite, TypeScript (strict mode), ESLint (via SvelteKit defaults)
 
 # Project Structure
 src/
 ├── lib/
-│   ├── server/        # server-side utilities (DB added in later phase)
+│   ├── server/
+
 │   ├── Messages.svelte
+
 │   ├── Send.svelte
 │   └── Status.svelte
 ├── routes/
 │   └── chat/
 │       └── +page.svelte
-├── types.ts           # shared typed event contracts
-server.ts              # Express + SvelteKit entrypoint
-sockets.ts             # Socket.IO real-time logic
+├── types.ts          
+server.ts
+sockets.ts
 
 # Running 
 To run open:

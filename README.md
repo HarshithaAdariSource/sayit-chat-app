@@ -1,11 +1,11 @@
-## SayIt — Real-Time Event Feed Platform
+# SayIt — Real-Time Event Feed Platform
 
 SayIt is a real-time, channel-based event feed application built with SvelteKit, TypeScript, and Socket.IO.
 It started as a simple chat application and was refactored into a structured, reliable real-time system with typed events, presence tracking, acknowledgements, and replayable history.
 
 The project focuses on real-time systems engineering, not social chat features.
 
-# Features
+## Features
 
 Real-time communication using Socket.IO
 
@@ -49,29 +49,37 @@ incident management platforms
 
 live data feeds
 
-# Tech Stack
-
+## Tech Stack
 Frontend: SvelteKit, TypeScript, Socket.IO client
 Backend: Node.js, Express, Socket.IO server
 Tooling: Vite, TypeScript (strict mode), ESLint (via SvelteKit defaults)
 
-# Project Structure
+## Project Structure
 src/
+
 ├── lib/
+
 │   ├── server/
 
 │   ├── Messages.svelte
 
 │   ├── Send.svelte
+
 │   └── Status.svelte
+
 ├── routes/
+
 │   └── chat/
+
 │       └── +page.svelte
+
 ├── types.ts          
+
 server.ts
+
 sockets.ts
 
-# Running 
+## Running 
 To run open:
 
 https://rm9g5xbl-5173.euw.devtunnels.ms/
@@ -79,7 +87,7 @@ https://rm9g5xbl-5173.euw.devtunnels.ms/
 
 Open multiple browser tabs to see real-time synchronization.
 
-# Event Model (simplified)
+## Event Model (simplified)
 
 Each event is a typed object:
 
@@ -96,7 +104,7 @@ Each event is a typed object:
 
 This makes the system extensible beyond chat messages.
 
-# Roadmap
+## Roadmap
 
  Typed real-time event system
 
@@ -110,7 +118,7 @@ This makes the system extensible beyond chat messages.
 
  Basic observability (metrics/logs)
 
-# License & Attribution
+## License & Attribution
 
 This project is based on the open-source repository
 ScriptRaccoon/sveltekit-chat-app (MIT License) and has been significantly refactored and extended.
